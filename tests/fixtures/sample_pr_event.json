@@ -1,0 +1,29 @@
+{
+  "action": "closed",
+  "number": 42,
+  "pull_request": {
+    "id": 123456789,
+    "number": 42,
+    "title": "Increase API rate limit to 200/min",
+    "body": "## Changes\n\n- Updated rate limiter configuration\n- Increased limit from 100 to 200 requests/min\n- Added rate limit headers to response\n\n## Testing\n\n- Tested with load testing tool\n- Confirmed new limits work correctly",
+    "merged": true,
+    "user": {
+      "login": "alice",
+      "id": 1001
+    },
+    "html_url": "https://github.com/owner/repo/pull/42",
+    "base": {
+      "repo": {
+        "full_name": "owner/repo"
+      }
+    },
+    "changed_files": 3
+  },
+  "repository": {
+    "full_name": "owner/repo",
+    "name": "repo"
+  },
+  "sender": {
+    "login": "alice"
+  }
+}

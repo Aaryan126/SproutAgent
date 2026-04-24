@@ -1,0 +1,9 @@
+# Environment variables
+.env
+
+# Claude-related files
+CLAUDE.md
+.claude/
+
+# Optional: ignore all env variants
+.env.*
