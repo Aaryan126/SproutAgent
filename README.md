@@ -10,6 +10,15 @@ Demo video: [Watch Sprout Agent in action](https://www.youtube.com/watch?v=N-fqM
 
 ---
 
+## The Problem
+
+- When engineers merge a PR, documentation updates are manual, optional, and easy to forget. Over time, docs drift from reality.
+- Technical and non-technical teams live in different tools: engineers in GitHub, product/ops/business teams in Notion. A code change that affects both goes undocumented in at least one place, leaving non-technical stakeholders working from stale information.
+- The people best positioned to fix docs (the PR author) are also the least motivated to stop and write them mid-flow.
+- Without a system like this, documentation debt compounds silently. Teams don't notice until someone follows outdated docs and something breaks.
+
+---
+
 ## How It Works
 
 1. A PR is merged in your GitHub repo
