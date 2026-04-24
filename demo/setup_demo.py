@@ -94,6 +94,13 @@ def ensure_file(repo, path: str, content: str, commit_message: str) -> None:
         print(f"  Created {path}")
 
 
+RATE_LIMITER_CONTENT = """# Rate Limiter Configuration
+
+MAX_REQUESTS_PER_MINUTE = 200
+RATE_LIMIT_HEADERS_ENABLED = True
+"""
+
+
 def create_rate_limit_pr(repo) -> str:
     branch = "demo/increase-rate-limit"
     main_sha = repo.get_branch("main").commit.sha
@@ -103,6 +110,25 @@ def create_rate_limit_pr(repo) -> str:
         print(f"  Created branch {branch}")
     except GithubException:
         print(f"  Branch {branch} already exists")
+
+    # Add a commit to the branch so GitHub allows PR creation
+    try:
+        existing = repo.get_contents("src/rate_limiter.py", ref=branch)
+        repo.update_file(
+            path="src/rate_limiter.py",
+            message="feat: increase rate limit to 200 requests/min",
+            content=RATE_LIMITER_CONTENT,
+            sha=existing.sha,
+            branch=branch,
+        )
+    except GithubException:
+        repo.create_file(
+            path="src/rate_limiter.py",
+            message="feat: increase rate limit to 200 requests/min",
+            content=RATE_LIMITER_CONTENT,
+            branch=branch,
+        )
+    print("  Added rate_limiter.py commit to branch")
 
     pr_body = """## Changes
 

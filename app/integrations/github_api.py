@@ -13,6 +13,7 @@ _DOC_DIRS = {"docs", "documentation", "doc"}
 
 class GitHubClient:
     def __init__(self, token: str, repo_name: str) -> None:
+        self._token = token
         self._gh = Github(token)
         self._repo_name = repo_name
 
@@ -34,42 +35,59 @@ class GitHubClient:
         self, query: str, docs_repo: str | None = None
     ) -> list[dict]:
         repo_name = docs_repo or self._repo_name
-        repo = await self._run_sync(self._gh.get_repo, repo_name)
-        contents = await self._run_sync(repo.get_contents, "")
 
-        results: dict[str, dict] = {}
+        def _sync_search() -> list[dict]:
+            gh = Github(self._token)
+            logger.info("github_search_docs", repo=repo_name, query=query)
+            try:
+                repo = gh.get_repo(repo_name)
+            except GithubException as e:
+                logger.warning("github_get_repo_failed", repo=repo_name, error=str(e))
+                return []
 
-        for item in contents:
-            if item.type == "dir" and item.path in _DOC_DIRS:
-                dir_results = await self._search_directory(repo, item.path, query)
-                for r in dir_results:
-                    results.setdefault(r["path"], r)
-            elif item.path.endswith(".md"):
-                doc = await self._load_and_filter(item, query)
-                if doc:
-                    results.setdefault(doc["path"], doc)
+            results: dict[str, dict] = {}
 
-        return list(results.values())
+            try:
+                root_contents = repo.get_contents("/")
+            except GithubException as e:
+                logger.warning("github_root_contents_failed", repo=repo_name, error=str(e))
+                return []
 
-    async def _search_directory(
-        self, repo: Any, dir_path: str, query: str
-    ) -> list[dict]:
+            if not isinstance(root_contents, list):
+                root_contents = [root_contents]
+
+            for item in root_contents:
+                if item.type == "dir" and item.path in _DOC_DIRS:
+                    for r in self._sync_search_directory(repo, item.path, query):
+                        results.setdefault(r["path"], r)
+                elif item.path.endswith(".md"):
+                    doc = self._sync_load_and_filter(item, query)
+                    if doc:
+                        results.setdefault(doc["path"], doc)
+
+            return list(results.values())
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _sync_search)
+
+    def _sync_search_directory(self, repo: Any, dir_path: str, query: str) -> list[dict]:
         results = []
         try:
-            contents = await self._run_sync(repo.get_contents, dir_path)
+            contents = repo.get_contents(dir_path)
+            if not isinstance(contents, list):
+                contents = [contents]
             for item in contents:
                 if item.type == "dir":
-                    sub = await self._search_directory(repo, item.path, query)
-                    results.extend(sub)
+                    results.extend(self._sync_search_directory(repo, item.path, query))
                 elif item.path.endswith(".md"):
-                    doc = await self._load_and_filter(item, query)
+                    doc = self._sync_load_and_filter(item, query)
                     if doc:
                         results.append(doc)
         except GithubException as e:
             logger.warning("github_dir_search_failed", path=dir_path, error=str(e))
         return results
 
-    async def _load_and_filter(self, item: Any, query: str) -> dict | None:
+    def _sync_load_and_filter(self, item: Any, query: str) -> dict | None:
         try:
             content = item.decoded_content.decode("utf-8", errors="replace")
             if query.lower() in content.lower():
