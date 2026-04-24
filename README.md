@@ -6,6 +6,8 @@ An event-driven AI agent that watches GitHub PRs, detects when documentation bec
 
 Live deployment: **`https://app-production-fd7d.up.railway.app`**
 
+Demo video: [Watch Sprout Agent in action](https://www.youtube.com/watch?v=N-fqMm5T3Hs)
+
 ---
 
 ## How It Works
