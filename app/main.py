@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 
 import structlog
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import create_tables, engine
@@ -49,7 +51,14 @@ app.include_router(webhooks.router)
 app.include_router(approvals.router)
 app.include_router(dashboard.router)
 
+app.mount("/ui", StaticFiles(directory="app/static", html=True), name="ui")
+
 
 @app.get("/health", tags=["health"])
 async def health() -> dict:
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/", include_in_schema=False)
+async def root_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/ui/")

@@ -173,6 +173,16 @@ class GitHubClient:
 
         return pr.html_url
 
+    async def merge_pr(self, pr_number: int) -> bool:
+        repo = await self._run_sync(self._gh.get_repo, self._repo_name)
+        pr = await self._run_sync(repo.get_pull, pr_number)
+        result = await self._run_sync(
+            pr.merge,
+            commit_message="docs: apply approved documentation update",
+            merge_method="squash",
+        )
+        return result.merged
+
     async def get_codeowners_content(self) -> str | None:
         try:
             content, _ = await self.get_file_content(".github/CODEOWNERS")

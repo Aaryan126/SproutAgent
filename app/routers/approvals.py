@@ -6,12 +6,22 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
+from app.integrations.github_api import GitHubClient
 from app.models.approval import Approval
 from app.models.doc_update import DocUpdate, DocUpdateStatus
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 logger = structlog.get_logger()
+
+
+def _parse_github_pr_url(url: str) -> tuple[str, int]:
+    # https://github.com/owner/repo/pull/123 -> ("owner/repo", 123)
+    parts = url.rstrip("/").split("/")
+    pr_number = int(parts[-1])
+    repo_name = f"{parts[-4]}/{parts[-3]}"
+    return repo_name, pr_number
 
 
 class ApprovalRequest(BaseModel):
@@ -95,6 +105,21 @@ async def record_decision(
     update.status = body.decision
     if body.decision == "approved":
         update.approved_at = datetime.utcnow()
+
+    await db.commit()
+
+    if body.decision == "approved" and update.github_pr_url:
+        try:
+            repo_name, pr_number = _parse_github_pr_url(update.github_pr_url)
+            gh = GitHubClient(settings.github_token, repo_name)
+            merged = await gh.merge_pr(pr_number)
+            if merged:
+                update.status = "applied"
+                update.applied_at = datetime.utcnow()
+                await db.commit()
+                logger.info("github_pr_merged", doc_update_id=doc_update_id, pr_url=update.github_pr_url)
+        except Exception as e:
+            logger.warning("github_pr_merge_failed", doc_update_id=doc_update_id, error=str(e))
 
     logger.info(
         "approval_recorded",

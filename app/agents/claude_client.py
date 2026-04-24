@@ -58,5 +58,23 @@ class ClaudeClient:
         cleaned = ClaudeClient.strip_json_fences(text)
         try:
             return json.loads(cleaned)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse Claude JSON response: {e}\nRaw: {text}") from e
+        except json.JSONDecodeError:
+            pass
+
+        # Claude sometimes appends text after the closing brace.
+        # Find the first complete JSON object by matching braces.
+        depth = 0
+        start = cleaned.find("{")
+        if start != -1:
+            for i, ch in enumerate(cleaned[start:], start):
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            return json.loads(cleaned[start : i + 1])
+                        except json.JSONDecodeError:
+                            break
+
+        raise ValueError(f"Failed to parse Claude JSON response.\nRaw: {text}")

@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sprout Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    .diff-add  { background:#d1fae5; color:#065f46; }
+    .diff-rem  { background:#fee2e2; color:#7f1d1d; }
+    .diff-meta { background:#dbeafe; color:#1e3a8a; }
+    .diff-ctx  { background:#f9fafb; color:#374151; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .fade-in { animation: fadeIn 0.2s ease-out; }
+    @keyframes slideIn { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+    .toast { animation: slideIn 0.25s ease-out; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen antialiased text-slate-800">
+
+<!-- Toast container -->
+<div id="toasts" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+<!-- Header -->
+<header class="bg-white border-b border-slate-200 sticky top-0 z-40 backdrop-blur">
+  <div class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-xl leading-none">🌱</span>
+      <span class="font-semibold text-slate-900 tracking-tight">Sprout Agent</span>
+      <span class="text-slate-300 text-lg">|</span>
+      <span class="text-sm text-slate-500">Documentation Review</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-slate-400 whitespace-nowrap">GitHub username</label>
+        <input id="approver-input" type="text" placeholder="your-username"
+          class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 w-36 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition" />
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span id="live-dot" class="w-2 h-2 rounded-full bg-slate-300 transition-colors"></span>
+        <span id="live-text" class="text-xs text-slate-400">Connecting...</span>
+      </div>
+      <button onclick="loadData()"
+        class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-6 py-8">
+
+  <!-- Stats -->
+  <div class="grid grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Events</p>
+      <p id="stat-events" class="text-3xl font-bold text-slate-800">—</p>
+      <p class="text-xs text-slate-400 mt-1">processed</p>
+    </div>
+    <div class="bg-amber-50 rounded-2xl p-5 border border-amber-100 shadow-sm">
+      <p class="text-xs font-semibold text-amber-500 uppercase tracking-widest mb-2">Pending</p>
+      <p id="stat-pending" class="text-3xl font-bold text-amber-600">—</p>
+      <p class="text-xs text-amber-400 mt-1">awaiting review</p>
+    </div>
+    <div class="bg-emerald-50 rounded-2xl p-5 border border-emerald-100 shadow-sm">
+      <p class="text-xs font-semibold text-emerald-500 uppercase tracking-widest mb-2">Approved</p>
+      <p id="stat-approved" class="text-3xl font-bold text-emerald-600">—</p>
+      <p class="text-xs text-emerald-400 mt-1">accepted</p>
+    </div>
+    <div class="bg-red-50 rounded-2xl p-5 border border-red-100 shadow-sm">
+      <p class="text-xs font-semibold text-red-400 uppercase tracking-widest mb-2">Rejected</p>
+      <p id="stat-rejected" class="text-3xl font-bold text-red-500">—</p>
+      <p class="text-xs text-red-300 mt-1">declined</p>
+    </div>
+  </div>
+
+  <!-- Filter tabs -->
+  <div class="flex items-center justify-between mb-5">
+    <div class="flex gap-1 bg-white border border-slate-100 rounded-xl p-1 shadow-sm">
+      <button onclick="setFilter('all')" id="tab-all"
+        class="tab-btn px-4 py-1.5 rounded-lg text-sm font-medium transition-all">All</button>
+      <button onclick="setFilter('pending')" id="tab-pending"
+        class="tab-btn px-4 py-1.5 rounded-lg text-sm font-medium transition-all">Pending</button>
+      <button onclick="setFilter('approved')" id="tab-approved"
+        class="tab-btn px-4 py-1.5 rounded-lg text-sm font-medium transition-all">Approved</button>
+      <button onclick="setFilter('rejected')" id="tab-rejected"
+        class="tab-btn px-4 py-1.5 rounded-lg text-sm font-medium transition-all">Rejected</button>
+    </div>
+    <p id="results-count" class="text-xs text-slate-400"></p>
+  </div>
+
+  <!-- Update cards -->
+  <div id="updates-list" class="space-y-3"></div>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="hidden text-center py-24 fade-in">
+    <div class="text-6xl mb-5">🌿</div>
+    <p class="text-slate-700 font-semibold text-lg">No doc updates yet</p>
+    <p class="text-slate-400 text-sm mt-2 max-w-xs mx-auto">
+      Merge a PR in your target repo to trigger the agent.
+      The agent will detect stale docs and queue them here for review.
+    </p>
+  </div>
+
+  <!-- Loading state -->
+  <div id="loading-state" class="text-center py-24">
+    <div class="text-5xl mb-4 opacity-50">🌱</div>
+    <p class="text-slate-400 text-sm">Loading...</p>
+  </div>
+
+</main>
+
+<script>
+const STATE = { updates: [], filter: 'all', loaded: false };
+
+// ─── Data fetching ──────────────────────────────────────────────────────────
+
+async function loadData() {
+  try {
+    const [dashRes, updatesRes] = await Promise.all([
+      fetch('/dashboard/'),
+      fetch('/approvals/')
+    ]);
+    if (!dashRes.ok || !updatesRes.ok) throw new Error('API error');
+    const dash = await dashRes.json();
+    const updates = await updatesRes.json();
+
+    STATE.updates = updates;
+    STATE.loaded = true;
+
+    document.getElementById('stat-events').textContent  = dash.total_events_processed ?? 0;
+    document.getElementById('stat-pending').textContent  = dash.doc_updates_by_status?.pending  ?? 0;
+    document.getElementById('stat-approved').textContent = dash.doc_updates_by_status?.approved ?? 0;
+    document.getElementById('stat-rejected').textContent = dash.doc_updates_by_status?.rejected ?? 0;
+
+    setLive(true);
+    renderUpdates();
+  } catch (e) {
+    setLive(false);
+    if (!STATE.loaded) {
+      document.getElementById('loading-state').innerHTML =
+        `<div class="text-5xl mb-4">⚠️</div><p class="text-slate-500">Could not reach the server</p>`;
+    }
+  }
+}
+
+function setLive(ok) {
+  const dot  = document.getElementById('live-dot');
+  const text = document.getElementById('live-text');
+  dot.className  = `w-2 h-2 rounded-full transition-colors ${ok ? 'bg-emerald-400' : 'bg-red-400'}`;
+  text.textContent = ok ? 'Live' : 'Offline';
+  text.className = `text-xs ${ok ? 'text-emerald-500' : 'text-red-400'}`;
+}
+
+// ─── Filtering ──────────────────────────────────────────────────────────────
+
+function setFilter(f) {
+  STATE.filter = f;
+  ['all','pending','approved','rejected'].forEach(tab => {
+    const btn = document.getElementById(`tab-${tab}`);
+    if (tab === f) {
+      btn.className = 'tab-btn px-4 py-1.5 rounded-lg text-sm font-semibold bg-indigo-600 text-white shadow-sm transition-all';
+    } else {
+      btn.className = 'tab-btn px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-all';
+    }
+  });
+  renderUpdates();
+}
+
+// ─── Rendering ──────────────────────────────────────────────────────────────
+
+function renderUpdates() {
+  document.getElementById('loading-state').classList.add('hidden');
+
+  const filtered = STATE.filter === 'all'
+    ? STATE.updates
+    : STATE.updates.filter(u => u.status === STATE.filter);
+
+  const count = document.getElementById('results-count');
+  count.textContent = `${filtered.length} update${filtered.length !== 1 ? 's' : ''}`;
+
+  const list  = document.getElementById('updates-list');
+  const empty = document.getElementById('empty-state');
+
+  if (filtered.length === 0) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  list.innerHTML = filtered.map(u => cardHtml(u)).join('');
+}
+
+function cardHtml(u) {
+  const conf = Math.round((u.confidence_score ?? 0) * 100);
+  const confColor = conf >= 80 ? '#10b981' : conf >= 60 ? '#f59e0b' : '#ef4444';
+  const confLabel = conf >= 80 ? 'text-emerald-600' : conf >= 60 ? 'text-amber-600' : 'text-red-500';
+
+  const statusStyles = {
+    pending:  'bg-amber-100 text-amber-700 border-amber-200',
+    approved: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    rejected: 'bg-red-100 text-red-700 border-red-200',
+    applied:  'bg-blue-100 text-blue-700 border-blue-200',
+  };
+  const changeStyles = {
+    modify:    'bg-blue-50 text-blue-700 border-blue-100',
+    add:       'bg-purple-50 text-purple-700 border-purple-100',
+    remove:    'bg-red-50 text-red-700 border-red-100',
+    deprecate: 'bg-orange-50 text-orange-700 border-orange-100',
+  };
+
+  const sBadge = statusStyles[u.status] ?? 'bg-slate-100 text-slate-600 border-slate-200';
+  const cBadge = changeStyles[u.change_type] ?? 'bg-slate-50 text-slate-600 border-slate-100';
+  const isPending = u.status === 'pending';
+
+  return `
+<div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden fade-in" id="card-${u.id}">
+  <div class="p-5">
+    <div class="flex items-start gap-4">
+
+      <!-- Confidence ring -->
+      <div class="flex-shrink-0 flex flex-col items-center gap-1 pt-0.5">
+        ${confRing(conf, confColor)}
+        <span class="text-xs font-semibold ${confLabel}">${conf}%</span>
+      </div>
+
+      <!-- Main content -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-start justify-between gap-2 flex-wrap">
+          <div class="flex items-center gap-2 flex-wrap min-w-0">
+            <span class="font-mono text-sm font-semibold text-slate-800 truncate max-w-xs" title="${esc(u.doc_path)}">${esc(u.doc_path)}</span>
+            <span class="px-2 py-0.5 rounded-md text-xs font-medium border ${cBadge}">${esc(u.change_type)}</span>
+            <span class="px-2 py-0.5 rounded-md text-xs font-medium border ${sBadge}">${esc(u.status)}</span>
+          </div>
+          <div class="flex items-center gap-3 flex-shrink-0">
+            ${u.github_pr_url ? `
+            <a href="${esc(u.github_pr_url)}" target="_blank" rel="noopener"
+               class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              View PR
+            </a>` : ''}
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 mt-1.5 flex-wrap">
+          <span class="text-xs text-slate-400">${timeAgo(u.created_at)}</span>
+          ${u.doc_section ? `<span class="text-xs text-slate-400">· section: <span class="font-medium text-slate-500">${esc(u.doc_section)}</span></span>` : ''}
+          ${u.assigned_to ? `<span class="text-xs text-slate-400">· assigned to <span class="font-medium text-slate-500">@${esc(u.assigned_to)}</span></span>` : ''}
+        </div>
+
+        <!-- Expandable sections -->
+        <div class="mt-4 space-y-2">
+          ${evidenceHtml(u.evidence)}
+          ${diffHtml(u.diff_markdown)}
+        </div>
+
+        <!-- Actions -->
+        ${isPending ? `
+        <div class="mt-5 pt-4 border-t border-slate-100 flex items-center gap-3">
+          <button onclick="decide(${u.id}, 'approved')" id="btn-approve-${u.id}"
+            class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Approve
+          </button>
+          <button onclick="decide(${u.id}, 'rejected')" id="btn-reject-${u.id}"
+            class="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-red-50 text-red-600 text-sm font-semibold rounded-xl border border-red-200 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Reject
+          </button>
+        </div>` : `
+        <div class="mt-4 pt-4 border-t border-slate-100">
+          <p class="text-xs text-slate-400">
+            ${u.status === 'applied'
+              ? `<span class="text-indigo-600 font-medium">✓ Applied to GitHub</span>${u.approved_at ? ' · ' + timeAgo(u.approved_at) : ''}`
+              : u.status === 'approved'
+              ? `<span class="text-emerald-600 font-medium">✓ Approved</span>${u.approved_at ? ' · ' + timeAgo(u.approved_at) : ''}`
+              : `<span class="text-red-500 font-medium">✗ Rejected</span>`}
+          </p>
+        </div>`}
+      </div>
+    </div>
+  </div>
+</div>`;
+}
+
+function confRing(pct, color) {
+  const r = 18, c = 2 * Math.PI * r;
+  const dash = (pct / 100) * c;
+  return `<svg width="44" height="44" viewBox="0 0 44 44" style="transform:rotate(-90deg)">
+    <circle cx="22" cy="22" r="${r}" stroke="#e2e8f0" stroke-width="3.5" fill="none"/>
+    <circle cx="22" cy="22" r="${r}" stroke="${color}" stroke-width="3.5" fill="none"
+      stroke-dasharray="${dash.toFixed(2)} ${(c - dash).toFixed(2)}" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function evidenceHtml(ev) {
+  if (!ev) return '';
+  const signals  = ev.event_signals ?? [];
+  const issues   = ev.doc_issues ?? [];
+  const reasoning = ev.reasoning ?? '';
+  if (!signals.length && !issues.length && !reasoning) return '';
+
+  let inner = '';
+  if (signals.length) {
+    inner += `<div class="mb-3">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Event signals</p>
+      <ul class="space-y-1.5">
+        ${signals.map(s => `<li class="flex items-start gap-2 text-sm text-slate-700"><span class="text-emerald-500 font-bold mt-0.5 leading-none">→</span>${esc(s)}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+  if (issues.length) {
+    inner += `<div class="mb-3">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Doc issues found</p>
+      <ul class="space-y-1.5">
+        ${issues.map(i => `<li class="flex items-start gap-2 text-sm text-slate-700"><span class="text-amber-500 font-bold mt-0.5 leading-none">!</span>${esc(i)}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+  if (reasoning) {
+    inner += `<div>
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Reasoning</p>
+      <p class="text-sm text-slate-600 italic leading-relaxed">"${esc(reasoning)}"</p>
+    </div>`;
+  }
+
+  return `<details class="group">
+    <summary class="cursor-pointer select-none flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors">
+      <svg id="ev-icon" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="transition-transform group-open:rotate-90"><polyline points="9 18 15 12 9 6"/></svg>
+      EVIDENCE
+    </summary>
+    <div class="mt-3 bg-slate-50 rounded-xl p-4 border border-slate-100">${inner}</div>
+  </details>`;
+}
+
+function diffHtml(md) {
+  if (!md) return '';
+  const m = md.match(/```diff\n?([\s\S]*?)\n?```/);
+  const raw = m ? m[1] : md.replace(/```diff\n?|```/g, '');
+  if (!raw.trim()) return '';
+
+  const rows = raw.split('\n').map(line => {
+    let cls = 'diff-ctx';
+    if      (line.startsWith('+++') || line.startsWith('---')) cls = 'diff-ctx opacity-50';
+    else if (line.startsWith('+')) cls = 'diff-add';
+    else if (line.startsWith('-')) cls = 'diff-rem';
+    else if (line.startsWith('@@')) cls = 'diff-meta';
+    return `<div class="${cls} px-4 py-0.5 font-mono text-xs leading-5 whitespace-pre">${esc(line) || '&nbsp;'}</div>`;
+  }).join('');
+
+  return `<details class="group">
+    <summary class="cursor-pointer select-none flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="transition-transform group-open:rotate-90"><polyline points="9 18 15 12 9 6"/></svg>
+      DIFF
+    </summary>
+    <div class="mt-3 rounded-xl overflow-hidden border border-slate-100 max-h-64 overflow-y-auto">${rows}</div>
+  </details>`;
+}
+
+// ─── Actions ────────────────────────────────────────────────────────────────
+
+async function decide(id, decision) {
+  const approver = document.getElementById('approver-input').value.trim();
+  if (!approver) {
+    const inp = document.getElementById('approver-input');
+    inp.focus();
+    inp.classList.add('ring-2', 'ring-red-400', 'border-red-300');
+    setTimeout(() => inp.classList.remove('ring-2', 'ring-red-400', 'border-red-300'), 2000);
+    toast('Enter your GitHub username first', 'error');
+    return;
+  }
+
+  const approveBtn = document.getElementById(`btn-approve-${id}`);
+  const rejectBtn  = document.getElementById(`btn-reject-${id}`);
+  if (approveBtn) approveBtn.disabled = true;
+  if (rejectBtn)  rejectBtn.disabled  = true;
+
+  try {
+    const res = await fetch(`/approvals/${id}/decide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approver, decision, comment: null }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail ?? `HTTP ${res.status}`);
+    }
+    toast(decision === 'approved' ? 'Doc update approved ✓' : 'Doc update rejected', decision === 'approved' ? 'success' : 'info');
+    await loadData();
+  } catch (e) {
+    if (approveBtn) approveBtn.disabled = false;
+    if (rejectBtn)  rejectBtn.disabled  = false;
+    toast(`Error: ${e.message}`, 'error');
+  }
+}
+
+// ─── Toast ──────────────────────────────────────────────────────────────────
+
+function toast(msg, type = 'info') {
+  const styles = {
+    success: 'bg-emerald-600 text-white',
+    error:   'bg-red-600 text-white',
+    info:    'bg-slate-800 text-white',
+  };
+  const container = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = `toast px-4 py-3 rounded-xl text-sm font-medium shadow-lg pointer-events-auto ${styles[type] ?? styles.info}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 350); }, 3000);
+}
+
+// ─── Utilities ──────────────────────────────────────────────────────────────
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 5)     return 'just now';
+  if (s < 60)    return `${Math.floor(s)}s ago`;
+  if (s < 3600)  return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Init ───────────────────────────────────────────────────────────────────
+
+const stored = localStorage.getItem('sprout-approver');
+if (stored) document.getElementById('approver-input').value = stored;
+document.getElementById('approver-input').addEventListener('input', e => {
+  localStorage.setItem('sprout-approver', e.target.value);
+});
+
+setFilter('all');
+loadData();
+setInterval(loadData, 30000);
+</script>
+</body>
+</html>

@@ -11,10 +11,10 @@ from app.models.event import Event
 
 logger = structlog.get_logger()
 
-ENTITY_SYSTEM_PROMPT = """You are an expert at analyzing software changes and identifying
-entities that appear in documentation. Extract only entities that are genuinely likely
-to appear verbatim in documentation: API endpoints, config values (numbers, limits),
-feature names, and product terms. Be precise and conservative. Always return valid JSON."""
+ENTITY_SYSTEM_PROMPT = """You are an expert at analyzing software changes to identify
+documentation that needs updating. Your job is to generate search terms that will find
+the relevant sections in EXISTING documentation — which still reflects the old state
+before this PR. Always return valid JSON."""
 
 SCORING_SYSTEM_PROMPT = """You are a documentation quality reviewer. Determine with high
 precision whether a documentation file contains outdated information based on a code change.
@@ -69,22 +69,27 @@ class ChangeDetector:
         return updates
 
     async def _extract_entities(self, pr_context: str) -> dict:
-        prompt = f"""Extract key entities from this PR that might appear in documentation.
+        prompt = f"""Analyze this PR and generate search terms to find affected documentation.
 
 PR Details:
 {pr_context}
 
-Return JSON with this exact schema:
+Generate terms that would appear in EXISTING docs (before this PR changed anything).
+For example: if a PR increases a rate limit from 100 to 200, search for "rate limit"
+or "requests per minute" — NOT "200/min" (existing docs still say the old value).
+If a PR adds OAuth support, search for "authentication" or "API key", not "OAuth 2.0"
+(existing docs don't mention OAuth yet).
+
+Return JSON:
 {{
-    "endpoints": ["list of API endpoints like /api/v2/users"],
-    "features": ["feature names like OAuth, SSO, rate limiting"],
-    "config_values": ["specific values like '200 requests per minute', '100/min'"],
-    "terms": ["technical terms like authentication, webhook"],
-    "products": ["product names or integrations"]
+    "endpoints": ["API path patterns like /api/v2/users, /webhook"],
+    "features": ["concept or feature names like 'rate limiting', 'authentication', 'SSO'"],
+    "config_values": ["config topic phrases like 'requests per minute', 'timeout', 'rate limit'"],
+    "terms": ["technical terms an existing doc would contain: 'API key', 'webhook', 'bearer token'"],
+    "products": ["product or integration names"]
 }}
 
-Only include entities that would realistically appear word-for-word in documentation.
-Return empty lists for categories with no matches."""
+Prefer short, broad phrases over specific new values. Return empty lists where not applicable."""
 
         try:
             response = await self._claude.generate(
@@ -102,9 +107,9 @@ Return empty lists for categories with no matches."""
 
         search_terms = []
         for category, values in entities.items():
-            search_terms.extend(values[:2])
+            search_terms.extend(values[:3])
 
-        for term in search_terms[:6]:
+        for term in search_terms[:10]:
             if not term:
                 continue
             try:
