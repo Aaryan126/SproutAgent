@@ -123,16 +123,14 @@ Prefer short, broad phrases over specific new values. Return empty lists where n
             except Exception as e:
                 logger.warning("doc_search_failed", term=term, error=str(e))
 
-            try:
-                notion_results = await self._notion.search_pages(query=term)
-                for r in notion_results:
-                    key = f"notion:{r['id']}"
-                    if key not in seen:
-                        seen[key] = r
-            except NotImplementedError:
-                pass
-            except Exception as e:
-                logger.warning("notion_search_failed", term=term, error=str(e))
+        try:
+            notion_pages = await self._notion.list_all_pages()
+            for r in notion_pages:
+                key = r["path"]
+                if key not in seen:
+                    seen[key] = r
+        except Exception as e:
+            logger.warning("notion_list_failed", error=str(e))
 
         return list(seen.values())
 

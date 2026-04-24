@@ -32,11 +32,14 @@ class UpdateGenerator:
             evidence=analysis.get("evidence", {}),
         )
 
-        full_new_file = apply_section_replacement(
-            full_doc=doc["content"],
-            original_section=original_section,
-            proposed_section=proposed_content,
-        )
+        try:
+            full_new_file = apply_section_replacement(
+                full_doc=doc["content"],
+                original_section=original_section,
+                proposed_section=proposed_content,
+            )
+        except ValueError:
+            full_new_file = None
 
         diff_markdown = generate_diff(
             original=original_section,

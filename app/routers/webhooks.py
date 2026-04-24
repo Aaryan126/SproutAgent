@@ -115,24 +115,31 @@ async def process_pr_event(event_id: int) -> None:
 
                 approver = await approver_router.get_approver(event, doc["path"])
 
+                platform = doc.get("platform", "github")
                 pr_url = None
-                try:
-                    pr_url = await github.create_doc_update_pr(
-                        file_path=doc["path"],
-                        new_content=generated["full_new_file"],
-                        branch_name="",
-                        pr_title=generated["pr_title"],
-                        pr_body=generated["pr_body"],
-                        reviewer=approver,
-                        event_id=str(event_id),
-                    )
-                    logger.info("doc_pr_created", url=pr_url, path=doc["path"])
-                except Exception as e:
-                    logger.error("doc_pr_creation_failed", path=doc["path"], error=str(e))
+                notion_page_url = None
+
+                if platform == "notion":
+                    notion_page_url = doc.get("html_url")
+                    logger.info("notion_update_queued", page_url=notion_page_url, path=doc["path"])
+                elif generated.get("full_new_file"):
+                    try:
+                        pr_url = await github.create_doc_update_pr(
+                            file_path=doc["path"],
+                            new_content=generated["full_new_file"],
+                            branch_name="",
+                            pr_title=generated["pr_title"],
+                            pr_body=generated["pr_body"],
+                            reviewer=approver,
+                            event_id=str(event_id),
+                        )
+                        logger.info("doc_pr_created", url=pr_url, path=doc["path"])
+                    except Exception as e:
+                        logger.error("doc_pr_creation_failed", path=doc["path"], error=str(e))
 
                 doc_update = DocUpdate(
                     event_id=event.id,
-                    doc_platform=doc.get("platform", "github"),
+                    doc_platform=platform,
                     doc_path=doc["path"],
                     doc_section=analysis.get("section_identifier"),
                     change_type=analysis.get("change_type", "modify"),
@@ -144,6 +151,7 @@ async def process_pr_event(event_id: int) -> None:
                     status=DocUpdateStatus.PENDING,
                     assigned_to=approver,
                     github_pr_url=pr_url,
+                    notion_page_url=notion_page_url,
                 )
                 db.add(doc_update)
 

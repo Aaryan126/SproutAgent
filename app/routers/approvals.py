@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.integrations.github_api import GitHubClient
+from app.integrations.notion_api import NotionClient
 from app.models.approval import Approval
 from app.models.doc_update import DocUpdate, DocUpdateStatus
 
@@ -42,6 +43,9 @@ def _serialize_doc_update(u: DocUpdate) -> dict:
         "status": u.status,
         "assigned_to": u.assigned_to,
         "github_pr_url": u.github_pr_url,
+        "notion_page_url": u.notion_page_url,
+        "original_content": u.original_content,
+        "proposed_content": u.proposed_content,
         "diff_markdown": u.diff_markdown,
         "evidence": u.evidence,
         "created_at": u.created_at.isoformat() if u.created_at else None,
@@ -108,18 +112,39 @@ async def record_decision(
 
     await db.commit()
 
-    if body.decision == "approved" and update.github_pr_url:
-        try:
-            repo_name, pr_number = _parse_github_pr_url(update.github_pr_url)
-            gh = GitHubClient(settings.github_token, repo_name)
-            merged = await gh.merge_pr(pr_number)
-            if merged:
-                update.status = "applied"
-                update.applied_at = datetime.utcnow()
-                await db.commit()
-                logger.info("github_pr_merged", doc_update_id=doc_update_id, pr_url=update.github_pr_url)
-        except Exception as e:
-            logger.warning("github_pr_merge_failed", doc_update_id=doc_update_id, error=str(e))
+    if body.decision == "approved":
+        if update.github_pr_url:
+            try:
+                repo_name, pr_number = _parse_github_pr_url(update.github_pr_url)
+                gh = GitHubClient(settings.github_token, repo_name)
+                merged = await gh.merge_pr(pr_number)
+                if merged:
+                    update.status = "applied"
+                    update.applied_at = datetime.utcnow()
+                    await db.commit()
+                    logger.info("github_pr_merged", doc_update_id=doc_update_id, pr_url=update.github_pr_url)
+            except Exception as e:
+                logger.warning("github_pr_merge_failed", doc_update_id=doc_update_id, error=str(e))
+
+        elif update.doc_platform == "notion" and update.original_content and update.proposed_content:
+            logger.info("notion_approval_start", doc_update_id=doc_update_id, doc_path=update.doc_path)
+            try:
+                page_id = update.doc_path.replace("notion:", "")
+                notion = NotionClient(settings.notion_token)
+                applied = await notion.apply_surgical_update(
+                    page_id=page_id,
+                    original_text=update.original_content,
+                    proposed_text=update.proposed_content,
+                )
+                if applied:
+                    update.status = "applied"
+                    update.applied_at = datetime.utcnow()
+                    await db.commit()
+                    logger.info("notion_page_updated", doc_update_id=doc_update_id, page_id=page_id)
+                else:
+                    logger.warning("notion_update_not_applied", doc_update_id=doc_update_id, page_id=page_id)
+            except Exception as e:
+                logger.warning("notion_update_failed", doc_update_id=doc_update_id, error=str(e))
 
     logger.info(
         "approval_recorded",

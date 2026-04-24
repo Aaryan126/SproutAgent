@@ -240,7 +240,10 @@ function cardHtml(u) {
       <div class="flex-1 min-w-0">
         <div class="flex items-start justify-between gap-2 flex-wrap">
           <div class="flex items-center gap-2 flex-wrap min-w-0">
-            <span class="font-mono text-sm font-semibold text-slate-800 truncate max-w-xs" title="${esc(u.doc_path)}">${esc(u.doc_path)}</span>
+            <span class="font-mono text-sm font-semibold text-slate-800 truncate max-w-xs" title="${esc(u.doc_path)}">${u.doc_platform === 'notion' ? esc(u.doc_section || u.doc_path.replace('notion:', '').substring(0,8) + '…') : esc(u.doc_path)}</span>
+            ${u.doc_platform === 'notion'
+              ? `<span class="px-2 py-0.5 rounded-md text-xs font-medium border bg-orange-50 text-orange-700 border-orange-200">Notion</span>`
+              : `<span class="px-2 py-0.5 rounded-md text-xs font-medium border bg-slate-50 text-slate-600 border-slate-200">GitHub</span>`}
             <span class="px-2 py-0.5 rounded-md text-xs font-medium border ${cBadge}">${esc(u.change_type)}</span>
             <span class="px-2 py-0.5 rounded-md text-xs font-medium border ${sBadge}">${esc(u.status)}</span>
           </div>
@@ -250,6 +253,12 @@ function cardHtml(u) {
                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               View PR
+            </a>` : ''}
+            ${u.notion_page_url ? `
+            <a href="${esc(u.notion_page_url)}" target="_blank" rel="noopener"
+               class="text-xs text-orange-600 hover:text-orange-800 font-medium flex items-center gap-1 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              View in Notion
             </a>` : ''}
           </div>
         </div>
@@ -283,7 +292,7 @@ function cardHtml(u) {
         <div class="mt-4 pt-4 border-t border-slate-100">
           <p class="text-xs text-slate-400">
             ${u.status === 'applied'
-              ? `<span class="text-indigo-600 font-medium">✓ Applied to GitHub</span>${u.approved_at ? ' · ' + timeAgo(u.approved_at) : ''}`
+              ? `<span class="text-indigo-600 font-medium">✓ Applied to ${u.doc_platform === 'notion' ? 'Notion' : 'GitHub'}</span>${u.approved_at ? ' · ' + timeAgo(u.approved_at) : ''}`
               : u.status === 'approved'
               ? `<span class="text-emerald-600 font-medium">✓ Approved</span>${u.approved_at ? ' · ' + timeAgo(u.approved_at) : ''}`
               : `<span class="text-red-500 font-medium">✗ Rejected</span>`}
