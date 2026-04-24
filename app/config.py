@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     confidence_threshold: float = 0.5
     notion_token: str = ""
     notion_database_id: str = ""
+    slack_bot_token: str = ""
+    slack_signing_secret: str = ""
+    slack_channel: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

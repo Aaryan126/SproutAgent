@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import create_tables, engine
-from app.routers import approvals, dashboard, webhooks
+from app.routers import approvals, dashboard, slack, webhooks
 
 import app.models  # noqa: F401 — ensures all models register with Base.metadata
 
@@ -50,6 +50,7 @@ app = FastAPI(
 app.include_router(webhooks.router)
 app.include_router(approvals.router)
 app.include_router(dashboard.router)
+app.include_router(slack.router)
 
 app.mount("/ui", StaticFiles(directory="app/static", html=True), name="ui")
 

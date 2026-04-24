@@ -14,6 +14,7 @@ from app.config import settings
 from app.database import AsyncSessionLocal, get_db
 from app.integrations.github_api import GitHubClient
 from app.integrations.notion_api import NotionClient
+from app.integrations.slack_api import SlackClient
 from app.models.doc_update import DocUpdate, DocUpdateStatus
 from app.models.event import Event
 from app.utils.signature_validator import validate_github_signature
@@ -158,6 +159,22 @@ async def process_pr_event(event_id: int) -> None:
             event.processed_at = datetime.utcnow()
             await db.commit()
             logger.info("processing_done", event_id=event_id, updates=len(updates))
+
+            slack = SlackClient(settings.slack_bot_token, settings.slack_channel)
+            result = await db.execute(
+                select(DocUpdate).where(DocUpdate.event_id == event.id)
+            )
+            for doc_update in result.scalars().all():
+                await slack.send_doc_update_notification({
+                    "id": doc_update.id,
+                    "doc_path": doc_update.doc_path,
+                    "doc_platform": doc_update.doc_platform,
+                    "doc_section": doc_update.doc_section,
+                    "change_type": doc_update.change_type,
+                    "confidence_score": doc_update.confidence_score,
+                    "assigned_to": doc_update.assigned_to,
+                    "evidence": doc_update.evidence,
+                })
 
         except Exception as e:
             logger.error("processing_failed", event_id=event_id, error=str(e), exc_info=True)
